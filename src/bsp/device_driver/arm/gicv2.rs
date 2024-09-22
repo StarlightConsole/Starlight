@@ -2,9 +2,7 @@ mod gicc;
 mod gicd;
 
 use crate::{
-    bsp::{self, device_driver::common::BoundedUsize},
-    cpu, driver, exception, synchronization,
-    synchronization::InitStateLock
+    bsp::{self, device_driver::common::BoundedUsize}, cpu, driver, exception, memory::{Address, Virtual}, synchronization::{self, InitStateLock}
 };
 
 type HandlerTable = [Option<exception::asynchronous::IRQHandlerDescriptor<IRQNumber>>; IRQNumber::MAX_INCLUSIVE + 1];

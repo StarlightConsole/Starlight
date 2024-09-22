@@ -33,25 +33,20 @@ mod state;
 mod synchronization;
 mod time;
 
+#[no_mangle]
 unsafe fn kernel_init() -> ! {
     exception::handling_init();
 
-    let phys_kernel_tables_base_addr = match memory::mmu::kernel_map_binary() {
-        Err(string) => panic!("error mapping kernel binary: {}", string),
-        Ok(addr) => addr
-    };
-
-    if let Err(e) = memory::mmu::enable_mmu_and_caching(phys_kernel_tables_base_addr) {
-        panic!("error enabling MMU: {}", e);
-    }
-
-    memory::mmu::post_enable_init();
+    memory::init();
 
     if let Err(x) = bsp::driver::init() {
         panic!("error initializing BSP driver subsystem: {}", x);
     }
 
     driver::driver_manager().init_drivers_and_irqs();
+
+    bsp::memory::mmu::kernel_add_mapping_records_for_precomputed();
+
     exception::asynchronous::local_irq_unmask();
     
     state::state_manager().transition_to_single_core_main();

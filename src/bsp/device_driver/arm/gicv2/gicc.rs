@@ -1,7 +1,7 @@
 use aarch64_cpu::registers::{Readable, Writeable};
 use tock_registers::{register_bitfields, register_structs, registers::ReadWrite};
 
-use crate::{bsp::device_driver::common::MMIODerefWrapper, exception};
+use crate::{bsp::device_driver::common::MMIODerefWrapper, exception, memory::{Address, Virtual}};
 
 register_bitfields! {
     u32,

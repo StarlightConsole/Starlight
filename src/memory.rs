@@ -107,3 +107,7 @@ impl fmt::Display for Address<Virtual> {
         write!(f, "{:04x}", q1)
     }
 }
+
+pub fn init() {
+    mmu::kernel_init_mmio_va_allocator();
+}

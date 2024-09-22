@@ -1,4 +1,4 @@
-use aarch64_cpu::registers::{ID_AA64MMFR0_EL1, MAIR_EL1, SCTLR_EL1, TCR_EL1, TTBR0_EL1};
+use aarch64_cpu::registers::{ID_AA64MMFR0_EL1, MAIR_EL1, SCTLR_EL1, TCR_EL1, TTBR1_EL1};
 use tock_registers::interfaces::*;
 use crate::memory::mmu::MMUEnableError;
 
@@ -35,6 +35,7 @@ impl<const AS_SIZE: usize> crate::memory::mmu::AddressSpace<AS_SIZE> {
 }
 
 impl MemoryManagementUnit {
+    #[inline(always)]
     fn set_up_mair(&self) {
         // define the memory types being mapped
         MAIR_EL1.write(
@@ -47,20 +48,21 @@ impl MemoryManagementUnit {
         );
     }
 
+    #[inline(always)]
     fn configure_translation_control(&self) {
-        let t0sz = (64 - bsp::memory::mmu::KernelVirtAddrSpace::SIZE_SHIFT) as u64;
+        let t1sz = (64 - bsp::memory::mmu::KernelVirtAddrSpace::SIZE_SHIFT) as u64;
 
         TCR_EL1.write(
-            TCR_EL1::TBI0::Used
+            TCR_EL1::TBI1::Used
                 + TCR_EL1::IPS::Bits_40
-                + TCR_EL1::TG0::KiB_64
-                + TCR_EL1::SH0::Inner
-                + TCR_EL1::ORGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
-                + TCR_EL1::IRGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
-                + TCR_EL1::EPD0::EnableTTBR0Walks
-                + TCR_EL1::A1::TTBR0
-                + TCR_EL1::T0SZ.val(t0sz)
-                + TCR_EL1::EPD1::DisableTTBR1Walks
+                + TCR_EL1::TG1::KiB_64
+                + TCR_EL1::SH1::Inner
+                + TCR_EL1::ORGN1::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+                + TCR_EL1::IRGN1::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+                + TCR_EL1::EPD1::EnableTTBR1Walks
+                + TCR_EL1::A1::TTBR1
+                + TCR_EL1::T1SZ.val(t1sz)
+                + TCR_EL1::EPD0::DisableTTBR0Walks
         );
     }
 }
@@ -82,7 +84,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
 
         self.set_up_mair();
 
-        TTBR0_EL1.set_baddr(phys_tables_base_addr.as_usize() as u64);
+        TTBR1_EL1.set_baddr(phys_tables_base_addr.as_usize() as u64);
 
         self.configure_translation_control();
 

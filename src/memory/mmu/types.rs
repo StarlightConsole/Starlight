@@ -39,6 +39,11 @@ pub struct MMIODescriptor {
 }
 
 impl<ATYPE: AddressType> PageAddress<ATYPE> {
+    #[allow(unused)]
+    pub const MAX: Self = PageAddress {
+        inner: Address::new(usize::MAX).align_down_page(),
+    };
+
     pub fn into_inner(self) -> Address<ATYPE> {
         self.inner
     }
@@ -135,6 +140,7 @@ impl<ATYPE: AddressType> MemoryRegion<ATYPE> {
         self.as_range().contains(&page_addr)
     }
 
+    #[allow(unused)]
     pub fn overlaps(&self, other_region: &Self) -> bool {
         let self_range = self.as_range();
 

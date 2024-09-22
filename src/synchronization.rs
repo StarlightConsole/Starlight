@@ -29,6 +29,7 @@ unsafe impl<T> Send for IRQSafeNullLock<T> where T: ?Sized + Send {}
 unsafe impl<T> Sync for IRQSafeNullLock<T> where T: ?Sized + Send {}
 
 impl<T> IRQSafeNullLock<T> {
+    #[allow(unused)]
     pub const fn new(data: T) -> Self {
         Self {
             data: UnsafeCell::new(data),

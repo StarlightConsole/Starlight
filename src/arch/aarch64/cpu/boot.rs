@@ -2,6 +2,8 @@ use core::arch::global_asm;
 
 use aarch64_cpu::{asm, registers::*};
 
+use crate::memory::{self, Address};
+
 global_asm!(
     include_str!("boot.s"),
     CONST_CURRENTEL_EL2 = const 0x8,
@@ -12,7 +14,7 @@ global_asm!(
 /// - the `bss` section is not initialized yet, the code can't use or reference it in any way
 /// - the hw state of EL1 must be prepared in a sound way
 #[inline(always)]
-unsafe fn prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr: u64) {
+unsafe fn prepare_el2_to_el1_transition(virt_boot_core_stack_end_exclusive_addr: u64, virt_kernel_init_addr: u64) {
     // enable timer counter registers for EL1
     CNTHCTL_EL2.write(CNTHCTL_EL2::EL1PCEN::SET + CNTHCTL_EL2::EL1PCTEN::SET);
 
@@ -35,11 +37,11 @@ unsafe fn prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr:
     );
 
     // let the link register point to kernel_init
-    ELR_EL2.set(crate::kernel_init as *const () as u64);
+    ELR_EL2.set(virt_kernel_init_addr);
 
     // set up SP_EL1 (stack pointer), which will be used by EL1 once we "return" to it. since there
     // are no plans to return to EL2, just re-use the same stack
-    SP_EL1.set(phys_boot_core_stack_end_exclusive_addr);
+    SP_EL1.set(virt_boot_core_stack_end_exclusive_addr);
 }
 
 /// the rust entry of the `kernel` binary
@@ -48,8 +50,12 @@ unsafe fn prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr:
 /// # safety
 /// - exception return from EL2 must continue execution in EL1 with `kernel_init()`
 #[no_mangle]
-pub unsafe extern "C" fn _start_rust(phys_boot_core_stack_end_exclusive_addr: u64) -> ! {
-    prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr);
+pub unsafe extern "C" fn _start_rust(phys_kernel_tables_base_addr: u64, virt_boot_core_stack_end_exclusive_addr: u64, virt_kernel_init_addr: u64) -> ! {
+    prepare_el2_to_el1_transition(virt_boot_core_stack_end_exclusive_addr, virt_kernel_init_addr);
+
+    // turn on the MMU for EL1
+    let addr = Address::new(phys_kernel_tables_base_addr as usize);
+    memory::mmu::enable_mmu_and_caching(addr).unwrap();
 
     // use `eret` to "return" to EL1, this results in execution of kernel_init() in EL1
     asm::eret()

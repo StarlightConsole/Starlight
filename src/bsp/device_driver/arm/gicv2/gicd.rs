@@ -1,4 +1,4 @@
-use crate::{bsp::device_driver::common::MMIODerefWrapper, state, synchronization::{interface::Mutex, IRQSafeNullLock}};
+use crate::{bsp::device_driver::common::MMIODerefWrapper, memory::{Address, Virtual}, state, synchronization::{interface::Mutex, IRQSafeNullLock}};
 
 use aarch64_cpu::registers::{Readable, Writeable};
 use tock_registers::{register_bitfields, register_structs, registers::{ReadOnly, ReadWrite}};

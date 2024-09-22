@@ -39,13 +39,8 @@ pub struct TranslationGranule<const GRANULE_SIZE: usize>;
 pub struct AddressSpace<const AS_SIZE: usize>;
 
 pub trait AssociatedTranslationTable {
+    type TableStartFromTop;
     type TableStartFromBottom;
-}
-
-fn kernel_init_mmio_va_allocator() {
-    let region = bsp::memory::mmu::virt_mmio_remap_region();
-
-    page_alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.init(region));
 }
 
 /// # safety
@@ -55,11 +50,14 @@ unsafe fn kernel_map_at_unchecked(name: &'static str, virt_region: &MemoryRegion
     bsp::memory::mmu::kernel_translation_tables()
         .write(|tables| tables.map_at(virt_region, phys_region, attr))?;
 
-    if let Err(x) = mapping_record::kernel_add(name, virt_region, phys_region, attr) {
-        warn!("{}", x);
-    }
+    kernel_add_mapping_record(name, virt_region, phys_region, attr);
 
     Ok(())
+}
+
+fn try_kernel_virt_addr_to_phys_addr(virt_addr: Address<Virtual>) -> Result<Address<Physical>, &'static str> {
+    bsp::memory::mmu::kernel_translation_tables()
+        .read(|tables| tables.try_virt_addr_to_phys_addr(virt_addr))
 }
 
 impl fmt::Display for MMUEnableError {
@@ -96,17 +94,16 @@ impl<const AS_SIZE: usize> AddressSpace<AS_SIZE> {
     }
 }
 
-/// # safety
-/// - see `kernel_map_at_unchecked()`
-/// - does not prevent aliasing. currently, the callers must be trusted
-pub unsafe fn kernel_map_at(name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) -> Result<(), &'static str> {
-    if bsp::memory::mmu::virt_mmio_remap_region().overlaps(virt_region) {
-        return Err("attempt to manually map into MMIO region");
+pub fn kernel_init_mmio_va_allocator() {
+    let region = bsp::memory::mmu::virt_mmio_remap_region();
+
+    page_alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.init(region));
+}
+
+pub fn kernel_add_mapping_record(name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) {
+    if let Err(x) = mapping_record::kernel_add(name, virt_region, phys_region, attr) {
+        warn!("{}", x);
     }
-
-    kernel_map_at_unchecked(name, virt_region, phys_region, attr)?;
-
-    Ok(())
 }
 
 /// # safety
@@ -137,29 +134,23 @@ pub unsafe fn kernel_map_mmio(name: &'static str, mmio_descriptor: &MMIODescript
     Ok(virt_addr + offset_into_start_page)
 }
 
-/// # safety
-/// - see [`bsp::memory::mmu::kernel_map_binary()`]
-pub unsafe fn kernel_map_binary() -> Result<Address<Physical>, &'static str> {
-    let phys_kernel_tables_base_addr = bsp::memory::mmu::kernel_translation_tables().write(|tables| {
-        tables.init();
-        tables.phys_base_address()
-    });
-
-    bsp::memory::mmu::kernel_map_binary()?;
-
-    Ok(phys_kernel_tables_base_addr)
+pub fn try_kernel_virt_page_addr_to_phys_page_addr(virt_page_addr: PageAddress<Virtual>) -> Result<PageAddress<Physical>, &'static str> {
+    bsp::memory::mmu::kernel_translation_tables()
+        .read(|tables| tables.try_virt_page_addr_to_phys_page_addr(virt_page_addr))
 }
 
-/// # safety
-/// - crucial function during kernel init. changes the complete memory view of the processor.
-pub unsafe fn enable_mmu_and_caching(phys_tables_base_addr: Address<Physical>) -> Result<(), MMUEnableError> {
-    arch_mmu::mmu().enable_mmu_and_caching(phys_tables_base_addr)
-}
-
-pub fn post_enable_init() {
-    kernel_init_mmio_va_allocator();
+pub fn try_kernel_page_attributes(virt_page_addr: PageAddress<Virtual>) -> Result<AttributeFields, &'static str> {
+    bsp::memory::mmu::kernel_translation_tables()
+        .read(|tables| tables.try_page_attributes(virt_page_addr))
 }
 
 pub fn kernel_print_mappings() {
     mapping_record::kernel_print()
+}
+
+/// # safety
+/// - crucial function during kernel init. changes the complete memory view of the processor.
+#[inline(always)]
+pub unsafe fn enable_mmu_and_caching(phys_tables_base_addr: Address<Physical>) -> Result<(), MMUEnableError> {
+    arch_mmu::mmu().enable_mmu_and_caching(phys_tables_base_addr)
 }

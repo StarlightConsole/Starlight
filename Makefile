@@ -62,8 +62,12 @@ export LD_SCRIPT_PATH
 KERNEL_MANIFEST = Cargo.toml
 KERNEL_LINKER_SCRIPT = kernel.ld
 LAST_BUILD_CONFIG = target/$(BSP).build_config
-KERNEL_ELF = target/$(TARGET)/debug/kernel
-KERNEL_ELF_DEPS = $(filter-out %: ,$(file < $(KERNEL_ELF).d)) $(KERNEL_MANIFEST) $(LAST_BUILD_CONFIG)
+KERNEL_ELF_RAW = target/$(TARGET)/debug/kernel
+KERNEL_ELF_RAW_DEPS = $(filter-out %: ,$(file < $(KERNEL_ELF).d)) $(KERNEL_MANIFEST) $(LAST_BUILD_CONFIG)
+
+TT_TOOL_PATH = tools/translation_table_tool
+KERNEL_ELF_TTABLES = target/$(TARGET)/debug/kernel+ttables
+KERNEL_ELF = $(KERNEL_ELF_TTABLES)
 
 RUSTFLAGS = $(RUSTC_MISC_ARGS) -C link-arg=--library-path=$(LD_SCRIPT_PATH) -C link-arg=--script=$(KERNEL_LINKER_SCRIPT)
 RUSTFLAGS_PEDANTIC = $(RUSTFLAGS) -D warnings -D missing_docs
@@ -85,6 +89,7 @@ COMET_TEST_CMD = comet test
 COMET_TEST_ARGS = --qemu-bin $(QEMU_BINARY) --upload-file $(KERNEL_BIN)
 
 EXEC_QEMU = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
+EXEC_TT_TOOL = ruby $(TT_TOOL_PATH)/main.rb
 
 .PHONY: all doc qemu qemu-asm qemu-debug gdb debug upload test clippy clean readelf objdump nm check
 
@@ -95,13 +100,18 @@ $(LAST_BUILD_CONFIG):
 	@mkdir -p target
 	@touch $(LAST_BUILD_CONFIG)
 
-$(KERNEL_ELF): $(KERNEL_ELF_DEPS)
+$(KERNEL_ELF_RAW): $(KERNEL_ELF_RAW_DEPS)
 	$(call color_header, "Compiling kernel ELF - $(BSP)")
 	@RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(RUSTC_CMD)
 
-$(KERNEL_BIN): $(KERNEL_ELF)
+$(KERNEL_ELF_TTABLES): $(KERNEL_ELF_RAW)
+	$(call color_header, "Precomputing kernel translation tables")
+	@cp $(KERNEL_ELF_RAW) $(KERNEL_ELF_TTABLES)
+	@$(EXEC_TT_TOOL) $(BSP) $(KERNEL_ELF_TTABLES)
+
+$(KERNEL_BIN): $(KERNEL_ELF_TTABLES)
 	$(call color_header, "Generating stripped binary")
-	@$(OBJCOPY_CMD) $(KERNEL_ELF) $(KERNEL_BIN)
+	@$(OBJCOPY_CMD) $(KERNEL_ELF_TTABLES) $(KERNEL_BIN)
 	$(call color_progress_prefix, "Name")
 	@echo $(KERNEL_BIN)
 	$(call color_progress_prefix, "Size")

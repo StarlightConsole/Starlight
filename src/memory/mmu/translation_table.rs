@@ -5,7 +5,7 @@ mod arch_translation_table;
 #[allow(unused)]
 pub use arch_translation_table::*;
 
-use crate::memory::{mmu::{AttributeFields, MemoryRegion}, Address, Physical, Virtual};
+use crate::memory::{mmu::{AttributeFields, MemoryRegion, PageAddress}, Address, Physical, Virtual};
 
 pub mod interface {
 
@@ -15,9 +15,8 @@ pub mod interface {
         /// # safety
         /// - implementor must ensure that this function can run only once or is harmless if
         ///   invoked multiple times
-        fn init(&mut self);
-
-        fn phys_base_address(&self) -> Address<Physical>;
+        #[allow(unused)]
+        fn init(&mut self) -> Result<(), &'static str>;
 
         /// # safety
         /// - using wrong attributes can cause multiple issues of different nature in the system
@@ -26,5 +25,9 @@ pub mod interface {
         ///   Rust's ownership assumptions. this should be protected against in the kernel's generic
         ///   MMU code
         unsafe fn map_at(&mut self, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) -> Result<(), &'static str>;
+
+        fn try_virt_page_addr_to_phys_page_addr(&self, virt_page_addr: PageAddress<Virtual>) -> Result<PageAddress<Physical>, &'static str>;
+        fn try_page_attributes(&self, virt_page_addr: PageAddress<Virtual>) -> Result<AttributeFields, &'static str>;
+        fn try_virt_addr_to_phys_addr(&self, virt_addr: Address<Virtual>) -> Result<Address<Physical>, &'static str>;
     }
 }

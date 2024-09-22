@@ -4,6 +4,13 @@
 	add \register, \register, #:lo12:\symbol
 .endm
 
+.macro ADR_ABS register, symbol
+	movz \register, #:abs_g3:\symbol
+	movk \register, #:abs_g2_nc:\symbol
+	movk \register, #:abs_g1_nc:\symbol
+	movk \register, #:abs_g0_nc:\symbol
+.endm
+
 // fn _start()
 .section .text._start
 
@@ -34,18 +41,25 @@ _start:
 
 // prepare the jump to rust code
 .L_prepare_rust:
-	// set the stack pointer, this ensures that any core in EL2 that needs the stack will work
-	ADR_REL x0, __boot_core_stack_end_exclusive
-	mov sp, x0
+	// load the base address of the kernel's translation tables
+	ldr x0, PHYS_KERNEL_TABLES_BASE_ADDR // provided by bsp/*/memory/mmu.rs
+
+	// load the absolute addresses of the following symbols
+	ADR_ABS x1, __boot_core_stack_end_exclusive
+	ADR_ABS x2, kernel_init
+
+	// set the stack pointer ensuring EL2 code can use the stack
+	ADR_REL x3, __boot_core_stack_end_exclusive
+	mov sp, x3
 
 	// get the cpu's timer counter frequency
-	ADR_REL x1, ARCH_TIMER_COUNTER_FREQUENCY // provided by aarch64/time.rs
-	mrs x2, CNTFRQ_EL0
-	cmp x2, xzr
+	ADR_REL x4, ARCH_TIMER_COUNTER_FREQUENCY // provided by aarch64/time.rs
+	mrs x5, CNTFRQ_EL0
+	cmp x5, xzr
 	b.eq .L_parking_loop
-	str w2, [x1]
+	str w5, [x4]
 
-	// jump to rust code, x0 holds the function argument provided to _start_rust
+	// jump to rust code, x0, x1 and x2 hold the function arguments provided to _start_rust()
 	b _start_rust
 
 // wait for events indefinitely

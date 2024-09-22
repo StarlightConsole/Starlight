@@ -17,6 +17,7 @@ impl TimeManager {
         Self
     }
 
+    #[allow(unused)]
     pub fn resolution(&self) -> Duration {
         arch_time::resolution()
     }
