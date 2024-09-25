@@ -78,6 +78,5 @@ fn kernel_main() -> ! {
     info!("registered IRQ handlers:");
     exception::asynchronous::irq_manager().print_handler();
 
-    info!("echoing input now");
     cpu::wait_forever();
 }
