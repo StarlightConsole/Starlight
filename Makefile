@@ -3,6 +3,8 @@
 BSP ?= rpi3
 DEV_SERIAL ?= /dev/tty.usbserial-0001
 STARSHIP_PATH ?= /Users/yolocat/Projects/starlight/starship
+DEBUG_PRINTS ?= 0
+
 
 ### End of Configuration ###
 
@@ -61,23 +63,28 @@ export LD_SCRIPT_PATH
 
 KERNEL_MANIFEST = Cargo.toml
 KERNEL_LINKER_SCRIPT = kernel.ld
-LAST_BUILD_CONFIG = target/$(BSP).build_config
+LAST_BUILD_CONFIG = target/$(BSP)_$(DEBUG_PRINTS).build_config
 KERNEL_ELF_RAW = target/$(TARGET)/debug/kernel
 KERNEL_ELF_RAW_DEPS = $(filter-out %: ,$(file < $(KERNEL_ELF).d)) $(KERNEL_MANIFEST) $(LAST_BUILD_CONFIG)
 
 TT_TOOL_PATH = tools/translation_table_tool
 KERNEL_ELF_TTABLES = target/$(TARGET)/debug/kernel+ttables
 KERNEL_ELF = $(KERNEL_ELF_TTABLES)
+KERNEL_ELF_SYMBOLS = target/$(TARGET)/debug/kernel.sym
+
+FEATURES = --features bsp_$(BSP)
+ifeq ($(DEBUG_PRINTS),1)
+	FEATURES += --features debug_prints
+endif
 
 RUSTFLAGS = $(RUSTC_MISC_ARGS) -C link-arg=--library-path=$(LD_SCRIPT_PATH) -C link-arg=--script=$(KERNEL_LINKER_SCRIPT)
 RUSTFLAGS_PEDANTIC = $(RUSTFLAGS) -D warnings -D missing_docs
-FEATURES = --features bsp_$(BSP)
 COMPILER_ARGS = --target=$(TARGET) $(FEATURES)
 
-RUSTC_CMD = cargo rustc $(COMPILER_ARGS)
+RUSTC_CMD = cargo rustc $(COMPILER_ARGS) -Z build-std=core,alloc --manifest-path $(KERNEL_MANIFEST)
 DOC_CMD = cargo doc $(COMPILER_ARGS)
 CLIPPY_CMD = cargo clippy $(COMPILER_ARGS)
-OBJCOPY_CMD = rust-objcopy --strip-all -O binary
+OBJCOPY_CMD = rust-objcopy
 
 COMET_DEBUG_CMD = comet debug
 COMET_DEBUG_ARGS = --port $(DEV_SERIAL)
@@ -100,18 +107,24 @@ $(LAST_BUILD_CONFIG):
 	@mkdir -p target
 	@touch $(LAST_BUILD_CONFIG)
 
-$(KERNEL_ELF_RAW): $(KERNEL_ELF_RAW_DEPS)
+$(KERNEL_ELF_RAW): $(KERNEL_ELF_RAW_DEPS) .FORCE
 	$(call color_header, "Compiling kernel ELF - $(BSP)")
 	@RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(RUSTC_CMD)
+
+.FORCE:
 
 $(KERNEL_ELF_TTABLES): $(KERNEL_ELF_RAW)
 	$(call color_header, "Precomputing kernel translation tables")
 	@cp $(KERNEL_ELF_RAW) $(KERNEL_ELF_TTABLES)
 	@$(EXEC_TT_TOOL) $(BSP) $(KERNEL_ELF_TTABLES)
 
-$(KERNEL_BIN): $(KERNEL_ELF_TTABLES)
+$(KERNEL_ELF_SYMBOLS): $(KERNEL_ELF_TTABLES)
+	$(call color_header, "Generating kernel symbols")
+	@$(OBJCOPY_CMD) --only-keep-debug -O elf64-aarch64 $(KERNEL_ELF_TTABLES) $(KERNEL_ELF_SYMBOLS)
+
+$(KERNEL_BIN): $(KERNEL_ELF_TTABLES) $(KERNEL_ELF_SYMBOLS)
 	$(call color_header, "Generating stripped binary")
-	@$(OBJCOPY_CMD) $(KERNEL_ELF_TTABLES) $(KERNEL_BIN)
+	@$(OBJCOPY_CMD) --strip-all -O binary $(KERNEL_ELF_TTABLES) $(KERNEL_BIN)
 	$(call color_progress_prefix, "Name")
 	@echo $(KERNEL_BIN)
 	$(call color_progress_prefix, "Size")
@@ -142,8 +155,8 @@ qemu-debug: $(KERNEL_BIN)
 
 endif
 
-gdb: $(KERNEL_ELF)
-	@$(GDB_BINARY) --quiet --tui -ex "target remote :1234" -ex "load" $(KERNEL_ELF)
+gdb: $(KERNEL_ELF_SYMBOLS)
+	@$(GDB_BINARY) --quiet --tui -ex "target remote :1234" -ex "load" $(KERNEL_ELF_SYMBOLS)
 
 debug:
 	@$(COMET_DEBUG_CMD) $(COMET_DEBUG_ARGS)
@@ -173,6 +186,6 @@ objdump: $(KERNEL_ELF)
 	$(call color_header, "Disassembling ELF file")
 	@$(OBJDUMP_BINARY) --disassemble --demangle --section .text --section .rodata $(KERNEL_ELF) | rustfilt
 
-nm: $(KERNEL_ELF)
+nm: $(KERNEL_ELF_SYMBOLS)
 	$(call color_header, "Reading symbols")
-	@$(NM_BINARY) --demangle --print-size $(KERNEL_ELF) | sort | rustfilt
+	@$(NM_BINARY) --demangle --print-size $(KERNEL_ELF_SYMBOLS) | sort | rustfilt

@@ -1,13 +1,14 @@
 #![allow(incomplete_features)]
 #![allow(internal_features)]
 
+#![feature(alloc_error_handler)]
 #![feature(asm_const)]
 #![feature(const_option)]
+#![feature(core_intrinsics)]
 #![feature(format_args_nl)]
-#![feature(trait_alias)]
 #![feature(generic_const_exprs)]
 #![feature(step_trait)]
-#![feature(core_intrinsics)]
+#![feature(trait_alias)]
 
 #![no_main]
 #![no_std]
@@ -18,6 +19,8 @@
 //! The `kernel` binary is the entry point for the Starlight Operating System.
 //!
 //! Starlight is a game console operating system for the handheld Starlight gaming device.
+
+extern crate alloc;
 
 mod bsp;
 mod comet;
@@ -56,8 +59,6 @@ unsafe fn kernel_init() -> ! {
 }
 
 fn kernel_main() -> ! {
-    comet::set_device(comet::Device::Starlight);
-
     info!("{} version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     info!("booting on: {}", bsp::board_name());
 
@@ -77,6 +78,9 @@ fn kernel_main() -> ! {
 
     info!("registered IRQ handlers:");
     exception::asynchronous::irq_manager().print_handler();
+
+    info!("kernel heap:");
+    memory::heap_alloc::kernel_heap_allocator().print_usage();
 
     cpu::wait_forever();
 }

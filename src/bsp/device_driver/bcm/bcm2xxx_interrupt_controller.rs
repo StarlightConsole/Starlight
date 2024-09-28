@@ -72,6 +72,12 @@ impl driver::interface::DeviceDriver for InterruptController {
     fn compatible(&self) -> &'static str {
         Self::COMPATIBLE
     }
+
+    unsafe fn init(&self) -> Result<(), &'static str> {
+        self.peripheral_ic.init();
+
+        Ok(())
+    }
 }
 
 impl exception::asynchronous::interface::IRQManager for InterruptController {

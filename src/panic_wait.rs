@@ -5,7 +5,7 @@ fn panic_prevent_reenter() {
     use core::sync::atomic::{AtomicBool, Ordering};
 
     #[cfg(not(target_arch = "aarch64"))]
-    compile_error!("Add the target_arch to above's check if the following code is safe to use");
+    compile_error!("add the target_arch to above's check if the following code is safe to use");
 
     static PANIC_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
@@ -29,7 +29,12 @@ fn panic(info: &PanicInfo) -> ! {
         _ => ("???", 0, 0)
     };
 
-    error!("Kernel panicked at\n\tline {}\n\tcolumn {}\n\tin file {}:\n\n{}", line, column, location, info.message());
+    error!("kernel panicked at");
+    error!("    line {}", line);
+    error!("    column {}", column);
+    error!("    in file {}:", location);
+    error!("");
+    error!("    {}", info.message());
 
     cpu::wait_forever()
 }

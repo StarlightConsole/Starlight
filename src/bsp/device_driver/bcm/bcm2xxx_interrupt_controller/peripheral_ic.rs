@@ -2,6 +2,7 @@ use super::{PendingIRQs, PeripheralIRQ};
 use crate::{
     bsp::device_driver::common::MMIODerefWrapper, exception, memory::{Address, Virtual}, synchronization::{interface::{Mutex, ReadWriteEx}, IRQSafeNullLock, InitStateLock}
 };
+use alloc::vec::Vec;
 
 use tock_registers::{
     interfaces::{Readable, Writeable},
@@ -32,7 +33,7 @@ register_structs! {
 type WriteOnlyRegisters = MMIODerefWrapper<WORegisterBlock>;
 type ReadOnlyRegisters = MMIODerefWrapper<RORegisterBlock>;
 
-type HandlerTable = [Option<exception::asynchronous::IRQHandlerDescriptor<PeripheralIRQ>>; PeripheralIRQ::MAX_INCLUSIVE + 1];
+type HandlerTable = Vec<Option<exception::asynchronous::IRQHandlerDescriptor<PeripheralIRQ>>>;
 
 pub struct PeripheralIC {
     wo_registers: IRQSafeNullLock<WriteOnlyRegisters>,
@@ -47,8 +48,12 @@ impl PeripheralIC {
         Self {
             wo_registers: IRQSafeNullLock::new(WriteOnlyRegisters::new(mmio_start_addr)),
             ro_registers: ReadOnlyRegisters::new(mmio_start_addr),
-            handler_table: InitStateLock::new([None; PeripheralIRQ::MAX_INCLUSIVE + 1]),
+            handler_table: InitStateLock::new(Vec::new()),
         }
+    }
+
+    pub fn init(&self) {
+        self.handler_table.write(|table| table.resize(PeripheralIRQ::MAX_INCLUSIVE + 1, None));
     }
 
     fn pending_irqs(&self) -> PendingIRQs {
@@ -93,7 +98,7 @@ impl exception::asynchronous::interface::IRQManager for PeripheralIC {
         self.handler_table.read(|table| {
             for irq_number in self.pending_irqs() {
                 match table[irq_number] {
-                    None => panic!("No handler registered for IRQ {}", irq_number),
+                    None => panic!("no handler registered for IRQ {}", irq_number),
                     Some(descriptor) => {
                         descriptor.handler().handle().expect("error handling IRQ");
                     },
@@ -105,7 +110,7 @@ impl exception::asynchronous::interface::IRQManager for PeripheralIC {
     fn print_handler(&self) {
         use crate::info;
 
-        info!("    Peripheral handler:");
+        info!("    peripheral handler:");
 
         self.handler_table.read(|table| {
             for (i, opt) in table.iter().enumerate() {

@@ -13,6 +13,9 @@ extern "Rust" {
     static __mmio_remap_start: UnsafeCell<()>;
     static __mmio_remap_end_exclusive: UnsafeCell<()>;
 
+    static __heap_start: UnsafeCell<()>;
+    static __heap_end_exclusive: UnsafeCell<()>;
+
     static __boot_core_stack_start: UnsafeCell<()>;
     static __boot_core_stack_end_exclusive: UnsafeCell<()>;
 }
@@ -96,6 +99,19 @@ fn virt_mmio_remap_start() -> PageAddress<Virtual> {
 /// - value is provided by linker script and must be trusted as-is
 fn mmio_remap_size() -> usize {
     unsafe { (__mmio_remap_end_exclusive.get() as usize) - (__mmio_remap_start.get() as usize) }
+}
+
+/// # safety
+/// - value is provided by linker script and must be trusted as-is
+#[inline(always)]
+fn virt_heap_start() -> PageAddress<Virtual> {
+    PageAddress::from(unsafe { __heap_start.get() as usize })
+}
+
+/// # safety
+/// - value is provided by linker script and must be trusted as-is
+fn heap_size() -> usize {
+    unsafe { (__heap_end_exclusive.get() as usize) - (__heap_start.get() as usize) }
 }
 
 /// # safety

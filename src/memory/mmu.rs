@@ -13,7 +13,7 @@ pub use types::*;
 
 use core::{fmt, num::NonZeroUsize};
 
-use crate::{bsp, memory::{Address, Physical}, synchronization::interface::{Mutex, ReadWriteEx}, warn};
+use crate::{bsp, memory::{Address, Physical}, synchronization::interface::{Mutex, ReadWriteEx}};
 
 use super::Virtual;
 
@@ -101,9 +101,7 @@ pub fn kernel_init_mmio_va_allocator() {
 }
 
 pub fn kernel_add_mapping_record(name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) {
-    if let Err(x) = mapping_record::kernel_add(name, virt_region, phys_region, attr) {
-        warn!("{}", x);
-    }
+    mapping_record::kernel_add(name, virt_region, phys_region, attr);
 }
 
 /// # safety

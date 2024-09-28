@@ -1,10 +1,11 @@
-use crate::{bsp, common, info, memory::{mmu::AccessPermissions, Address, Physical, Virtual}, synchronization::{interface::ReadWriteEx, InitStateLock}, warn};
+use alloc::{vec, vec::Vec};
+
+use crate::{bsp, common, info, memory::{mmu::AccessPermissions, Address, Physical, Virtual}, synchronization::{interface::ReadWriteEx, InitStateLock}};
 
 use super::{AttributeFields, MMIODescriptor, MemAttributes, MemoryRegion};
 
-#[derive(Copy, Clone)]
 struct MappingRecordEntry {
-    pub users: [Option<&'static str>; 5],
+    pub users: Vec<&'static str>,
     pub phys_start_addr: Address<Physical>,
     pub virt_start_addr: Address<Virtual>,
     pub num_pages: usize,
@@ -12,7 +13,7 @@ struct MappingRecordEntry {
 }
 
 struct MappingRecord {
-    inner: [Option<MappingRecordEntry>; 12],
+    inner: Vec<MappingRecordEntry>,
 }
 
 static KERNEL_MAPPING_RECORD: InitStateLock<MappingRecord> = InitStateLock::new(MappingRecord::new());
@@ -20,7 +21,7 @@ static KERNEL_MAPPING_RECORD: InitStateLock<MappingRecord> = InitStateLock::new(
 impl MappingRecordEntry {
     pub fn new(name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) -> Self {
         Self {
-            users: [Some(name), None, None, None, None],
+            users: vec![name],
             phys_start_addr: phys_region.start_addr(),
             virt_start_addr: virt_region.start_addr(),
             num_pages: phys_region.num_pages(),
@@ -28,53 +29,27 @@ impl MappingRecordEntry {
         }
     }
 
-    fn find_next_free_user(&mut self) -> Result<&mut Option<&'static str>, &'static str> {
-        if let Some(x) = self.users.iter_mut().find(|x| x.is_none()) {
-            return Ok(x);
-        }
-
-        Err("storage for user info exhausted")
-    }
-
-    pub fn add_user(&mut self, user: &'static str) -> Result<(), &'static str> {
-        let x = self.find_next_free_user()?;
-        *x = Some(user);
-        Ok(())
+    pub fn add_user(&mut self, user: &'static str) {
+        self.users.push(user);
     }
 }
 
 impl MappingRecord {
     pub const fn new() -> Self {
         Self {
-            inner: [None; 12]
+            inner: Vec::new(),
         }
-    }
-
-    fn size(&self) -> usize {
-        self.inner.iter().filter(|x| x.is_some()).count()
     }
 
     fn sort(&mut self) {
-        let upper_bound_exclusive = self.size();
-        let entries = &mut self.inner[0..upper_bound_exclusive];
-
-        if !entries.is_sorted_by_key(|item| item.unwrap().virt_start_addr) {
-            entries.sort_unstable_by_key(|item| item.unwrap().virt_start_addr)
+        if !self.inner.is_sorted_by_key(|item| item.virt_start_addr) {
+            self.inner.sort_unstable_by_key(|item| item.virt_start_addr);
         }
-    }
-
-    fn find_next_free(&mut self) -> Result<&mut Option<MappingRecordEntry>, &'static str> {
-        if let Some(x) = self.inner.iter_mut().find(|x| x.is_none()) {
-            return Ok(x);
-        }
-
-        Err("storage for user info exhausted")
     }
 
     fn find_duplicate(&mut self, phys_region: &MemoryRegion<Physical>) -> Option<&mut MappingRecordEntry> {
         self.inner
             .iter_mut()
-            .filter_map(|x| x.as_mut())
             .filter(|x| x.attribute_fields.mem_attributes == MemAttributes::Device)
             .find(|x| {
                 if x.phys_start_addr != phys_region.start_addr() {
@@ -89,22 +64,18 @@ impl MappingRecord {
             })
     }
 
-    pub fn add(&mut self, name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) -> Result<(), &'static str> {
-        let x = self.find_next_free()?;
-
-        *x = Some(MappingRecordEntry::new(name, virt_region, phys_region, attr));
+    pub fn add(&mut self, name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) {
+        self.inner.push(MappingRecordEntry::new(name, virt_region, phys_region, attr));
 
         self.sort();
-
-        Ok(())
     }
 
     pub fn print(&self) {
-        info!("      -------------------------------------------------------------------------------------------------------------------------------------------");
-        info!("      {:^44}     {:^30}   {:^7}   {:^9}   {:^35}", "Virtual", "Physical", "Size", "Attr", "Entity");
-        info!("      -------------------------------------------------------------------------------------------------------------------------------------------");
+        info!("    -------------------------------------------------------------------------------------------------------------------------------------------");
+        info!("    {:^44}     {:^30}   {:^7}   {:^9}   {:^35}", "Virtual", "Physical", "Size", "Attr", "Entity");
+        info!("    -------------------------------------------------------------------------------------------------------------------------------------------");
 
-        for i in self.inner.iter().flatten() {
+        for i in self.inner.iter() {
             let size = i.num_pages * bsp::memory::mmu::KernelGranule::SIZE;
 
             let virt_start = i.virt_start_addr;
@@ -131,20 +102,18 @@ impl MappingRecord {
                 "X"
             };
 
-            info!("      {}..{} --> {}..{} | {:>3} {} | {:<3} {} {:<2} | {}", virt_start, virt_end_inclusive, phys_start, phys_end_inclusive, size, unit, attr, acc_p, xn, i.users[0].unwrap());
+            info!("    {}..{} --> {}..{} | {:>3} {} | {:<3} {} {:<2} | {}", virt_start, virt_end_inclusive, phys_start, phys_end_inclusive, size, unit, attr, acc_p, xn, i.users[0]);
 
-            for k in i.users[1..].iter() {
-                if let Some(additional_user) = *k {
-                    info!("                                                                                                            | {}", additional_user);
-                }
+            for k in &i.users[1..] {
+                info!("                                                                                                            | {}", k);
             }
 
-            info!("      -------------------------------------------------------------------------------------------------------------------------------------------");
+            info!("    -------------------------------------------------------------------------------------------------------------------------------------------");
         }
     }
 }
 
-pub fn kernel_add(name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) -> Result<(), &'static str> {
+pub fn kernel_add(name: &'static str, virt_region: &MemoryRegion<Virtual>, phys_region: &MemoryRegion<Physical>, attr: &AttributeFields) {
     KERNEL_MAPPING_RECORD.write(|mr| mr.add(name, virt_region, phys_region, attr))
 }
 
@@ -154,9 +123,7 @@ pub fn kernel_find_and_insert_mmio_duplicate(mmio_descriptor: &MMIODescriptor, n
     KERNEL_MAPPING_RECORD.write(|mr| {
         let dup = mr.find_duplicate(&phys_region)?;
 
-        if let Err(x) = dup.add_user(new_user) {
-            warn!("{}", x);
-        }
+        dup.add_user(new_user);
 
         Some(dup.virt_start_addr)
     })

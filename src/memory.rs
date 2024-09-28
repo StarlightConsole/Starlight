@@ -2,6 +2,7 @@ use core::{fmt, marker::PhantomData, ops::{Add, Sub}};
 
 use crate::{bsp, common};
 
+pub mod heap_alloc;
 pub mod mmu;
 
 pub trait AddressType: Copy + Clone + PartialOrd + PartialEq + Ord + Eq {}
@@ -110,4 +111,5 @@ impl fmt::Display for Address<Virtual> {
 
 pub fn init() {
     mmu::kernel_init_mmio_va_allocator();
+    heap_alloc::kernel_init_heap_allocator();
 }

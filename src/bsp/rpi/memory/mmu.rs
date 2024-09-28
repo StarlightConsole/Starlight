@@ -48,6 +48,15 @@ fn virt_data_region() -> MemoryRegion<Virtual> {
     MemoryRegion::new(start_page_addr, end_exclusive_page_addr)
 }
 
+pub fn virt_heap_region() -> MemoryRegion<Virtual> {
+    let num_pages = size_to_num_pages(super::heap_size());
+
+    let start_page_addr = super::virt_heap_start();
+    let end_exclusive_page_addr = start_page_addr.checked_offset(num_pages as isize).unwrap();
+
+    MemoryRegion::new(start_page_addr, end_exclusive_page_addr)
+}
+
 fn virt_boot_core_stack_region() -> MemoryRegion<Virtual> {
     let num_pages = size_to_num_pages(super::boot_core_stack_size());
     
@@ -96,6 +105,14 @@ pub fn kernel_add_mapping_records_for_precomputed() {
         &virt_data_region,
         &kernel_virt_to_phys_region(virt_data_region),
         &kernel_page_attributes(virt_data_region.start_page_addr()),
+    );
+
+    let virt_heap_region = virt_heap_region();
+    generic_mmu::kernel_add_mapping_record(
+        "Kernel heap",
+        &virt_heap_region,
+        &kernel_virt_to_phys_region(virt_heap_region),
+        &kernel_page_attributes(virt_heap_region.start_page_addr()),
     );
 
     let virt_boot_core_stack_region = virt_boot_core_stack_region();

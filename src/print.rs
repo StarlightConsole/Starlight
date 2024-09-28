@@ -92,3 +92,31 @@ macro_rules! error {
         ));
     })
 }
+
+/// Prints a debug message only shown when using the feature "debug_prints", with a newline
+#[macro_export]
+macro_rules! debug {
+    ($string:expr) => ({
+        if cfg!(feature = "debug_prints") {
+            let timestamp = $crate::time::time_manager().uptime();
+
+            $crate::print::_print(format_args_nl!(
+                concat!("[D {:>3}.{:06}] ", $string),
+                timestamp.as_secs(),
+                timestamp.subsec_micros(),
+            ));
+        }
+    });
+    ($format_string:expr, $($arg:tt)*) => ({
+        if cfg!(feature = "debug_prints") {
+            let timestamp = $crate::time::time_manager().uptime();
+
+            $crate::print::_print(format_args_nl!(
+                concat!("[D {:>3}.{:06}] ", $format_string),
+                timestamp.as_secs(),
+                timestamp.subsec_micros(),
+                $($arg)*
+            ));
+        }
+    });
+}

@@ -5,7 +5,9 @@ use crate::{
     bsp::{self, device_driver::common::BoundedUsize}, cpu, driver, exception, memory::{Address, Virtual}, synchronization::{self, InitStateLock}
 };
 
-type HandlerTable = [Option<exception::asynchronous::IRQHandlerDescriptor<IRQNumber>>; IRQNumber::MAX_INCLUSIVE + 1];
+use alloc::vec::Vec;
+
+type HandlerTable = Vec<Option<exception::asynchronous::IRQHandlerDescriptor<IRQNumber>>>;
 
 pub type IRQNumber = BoundedUsize<{ GICv2::MAX_IRQ_NUMBER }>;
 
@@ -21,7 +23,7 @@ pub struct GICv2 {
 }
 
 impl GICv2 {
-    const MAX_IRQ_NUMBER: usize = 300; // normally 1019, but keep it lower to save some space
+    const MAX_IRQ_NUMBER: usize = 1019;
 
     pub const COMPATIBLE: &'static str = "GICv2 (ARM Generic Interrupt Controller v2)";
 
@@ -31,7 +33,7 @@ impl GICv2 {
         Self {
             gicd: gicd::GICD::new(gicd_mmio_start_addr),
             gicc: gicc::GICC::new(gicc_mmio_start_addr),
-            handler_table: InitStateLock::new([None; IRQNumber::MAX_INCLUSIVE + 1]),
+            handler_table: InitStateLock::new(Vec::new()),
         }
     }
 }
@@ -46,6 +48,8 @@ impl driver::interface::DeviceDriver for GICv2 {
     }
 
     unsafe fn init(&self) -> Result<(), &'static str> {
+        self.handler_table.write(|table| table.resize(IRQNumber::MAX_INCLUSIVE + 1, None));
+
         if bsp::cpu::BOOT_CORE_ID == cpu::smp::core_id() {
             self.gicd.boot_core_init();
         }
@@ -87,7 +91,7 @@ impl exception::asynchronous::interface::IRQManager for GICv2 {
 
         self.handler_table.read(|table| {
             match table[irq_number] {
-                None => panic!("No handler registered for IRQ {}", irq_number),
+                None => panic!("no handler registered for IRQ {}", irq_number),
                 Some(descriptor) => {
                     descriptor.handler().handle().expect("error handling IRQ");
                 }
@@ -100,7 +104,7 @@ impl exception::asynchronous::interface::IRQManager for GICv2 {
     fn print_handler(&self) {
         use crate::info;
 
-        info!("    Peripheral handler:");
+        info!("    peripheral handler:");
         self.handler_table.read(|table| {
             for (i, opt) in table.iter().skip(32).enumerate() {
                 if let Some(handler) = opt {

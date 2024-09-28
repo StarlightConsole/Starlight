@@ -168,6 +168,12 @@ impl PL011UartInner {
         self.chars_written += 1;
     }
 
+    fn write_array(&mut self, a: &[char]) {
+        for c in a {
+            self.write_char(*c);
+        }
+    }
+
     fn flush(&self) {
         while self.registers.FR.matches_all(FR::BUSY::SET) {
             cpu::nop();
@@ -245,6 +251,10 @@ impl driver::interface::DeviceDriver for PL011Uart {
 impl console::interface::Write for PL011Uart {
     fn write_char(&self, c: char) {
         self.inner.lock(|inner| inner.write_char(c));
+    }
+
+    fn write_array(&self, a: &[char]) {
+        self.inner.lock(|inner| inner.write_array(a));
     }
 
     fn write_fmt(&self, args: core::fmt::Arguments) -> fmt::Result {
