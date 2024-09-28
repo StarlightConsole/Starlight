@@ -1,6 +1,10 @@
 use core::fmt::{self, Write};
 
-use crate::{console, debug, synchronization::{interface::ReadWriteEx, InitStateLock}, warn};
+use crate::{
+    console, debug,
+    synchronization::{interface::ReadWriteEx, InitStateLock},
+    warn,
+};
 
 use super::interface;
 
@@ -63,7 +67,7 @@ impl interface::Write for BufferConsole {
     fn write_array(&self, _a: &[char]) {
         unimplemented!("write_array is not implemented for BufferConsole");
     }
-    
+
     fn write_fmt(&self, args: fmt::Arguments) -> fmt::Result {
         self.inner.write(|inner| inner.write_fmt(args))
     }
